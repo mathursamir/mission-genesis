@@ -1,0 +1,37 @@
+A ReentrantLock is unstructured, unlike synchronized constructs -- i.e. you don't need to use a block structure for locking and can even hold a lock across methods.
+An example:
+
+private ReentrantLock lock;
+
+public void foo() {
+  ...
+  lock.lock();
+  ...
+}
+
+public void bar() {
+  ...
+  lock.unlock();
+  ...
+}
+Such flow is impossible to represent via a single monitor in a synchronized construct.
+
+Aside from that, ReentrantLock supports lock polling and interruptible lock waits that support time-out. ReentrantLock also has support for configurable fairness policy, allowing more flexible thread scheduling.
+
+The constructor for this class accepts an optional fairness parameter. When set true, under contention, locks favor granting access to the longest-waiting thread. Otherwise this lock does not guarantee any particular access order. Programs using fair locks accessed by many threads may display lower overall throughput (i.e., are slower; often much slower) than those using the default setting, but have smaller variances in times to obtain locks and guarantee lack of starvation. Note however, that fairness of locks does not guarantee fairness of thread scheduling. Thus, one of many threads using a fair lock may obtain it multiple times in succession while other active threads are not progressing and not currently holding the lock. Also note that the untimed tryLock method does not honor the fairness setting. It will succeed if the lock is available even if other threads are waiting.
+
+ReentrantLock may also be more scalable, performing much better under higher contention. You can read more about this here.
+
+This claim has been contested, however; see the following comment:
+
+In the reentrant lock test, a new lock is created each time, thus there is no exclusive locking and the resulting data is invalid. Also, the IBM link offers no source code for the underlying benchmark so its impossible to characterize whether the test was even conducted correctly.
+
+When should you use ReentrantLocks? According to that developerWorks article...
+
+The answer is pretty simple -- use it when you actually need something it provides that synchronized doesn't, like timed lock waits, interruptible lock waits, non-block-structured locks, multiple condition variables, or lock polling. ReentrantLock also has scalability benefits, and you should use it if you actually have a situation that exhibits high contention, but remember that the vast majority of synchronized blocks hardly ever exhibit any contention, let alone high contention. I would advise developing with synchronization until synchronization has proven to be inadequate, rather than simply assuming "the performance will be better" if you use ReentrantLock. Remember, these are advanced tools for advanced users. (And truly advanced users tend to prefer the simplest tools they can find until they're convinced the simple tools are inadequate.) As always, make it right first, and then worry about whether or not you have to make it faster.
+
+One final aspect that's gonna become more relevant in the near future has to do with Java 15 and Project Loom. In the (new) world of virtual threads, the underlying scheduler would be able to work much better with ReentrantLock than it's able to do with synchronized, that's true at least in the initial Java 15 release but may be optimized later.
+
+In the current Loom implementation, a virtual thread can be pinned in two situations: when there is a native frame on the stack — when Java code calls into native code (JNI) that then calls back into Java — and when inside a synchronized block or method. In those cases, blocking the virtual thread will block the physical thread that carries it. Once the native call completes or the monitor released (the synchronized block/method is exited) the thread is unpinned.
+
+If you have a common I/O operation guarded by a synchronized, replace the monitor with a ReentrantLock to let your application benefit fully from Loom’s scalability boost even before we fix pinning by monitors (or, better yet, use the higher-performance StampedLock if you can)
